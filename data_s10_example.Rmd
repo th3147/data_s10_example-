@@ -1,0 +1,52 @@
+---
+title: "data_s10_example"
+author: "Te-Hsuan Huang"
+date: "2025-11-22"
+output: github_document
+---
+```{r}
+library(tidyverse)
+library(p8105.datasets)
+
+set.seed(1)
+```
+
+# Import the data
+```{r}
+data("nyc_airbnb")
+
+nyc_airbnb = 
+  nyc_airbnb |> 
+  mutate(stars = review_scores_location / 2) |> 
+  rename(
+    borough = neighbourhood_group,
+    neighborhood = neighbourhood) |> 
+  filter(borough != "Staten Island") |> 
+  select(price, stars, borough, neighborhood, room_type)
+```
+
+# fit a model
+```{r}
+fit = lm(price ~ stars + borough, data = nyc_airbnb)
+```
+
+# Let's see the result
+```{r}
+fit 
+summary(fit)
+coef(fit)
+residuals(fit)
+```
+
+# let's look at the result better
+```{r}
+broom::glance(fit)
+broom::tidy(fit)
+
+fit |> 
+  broom::tidy() |> 
+  select(term, estimate, p.value) |> 
+  mutate(term = str_replace(term, "borough", "Borough: ")) |> 
+  knitr::kable(digits = 5)
+```
+
