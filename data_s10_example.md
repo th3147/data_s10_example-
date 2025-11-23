@@ -186,3 +186,119 @@ anova(fit_null, fit_alt) |>
     ##   <chr>                         <dbl>   <dbl> <dbl>   <dbl>     <dbl>      <dbl>
     ## 1 price ~ stars                 30528  1.03e9    NA NA            NA  NA        
     ## 2 price ~ stars + borough       30525  1.01e9     3  2.53e7      256.  7.84e-164
+
+# Nest data, fit model
+
+- This is formal but too complex
+
+``` r
+nyc_airbnb |> 
+  lm(price ~ stars * borough + room_type * borough, data = _) |> 
+  broom::tidy() |> 
+  knitr::kable(digits = 3)
+```
+
+| term                                  | estimate | std.error | statistic | p.value |
+|:--------------------------------------|---------:|----------:|----------:|--------:|
+| (Intercept)                           |   95.694 |    19.184 |     4.988 |   0.000 |
+| stars                                 |   27.110 |     3.965 |     6.838 |   0.000 |
+| boroughBrooklyn                       |  -26.066 |    25.080 |    -1.039 |   0.299 |
+| boroughQueens                         |   -4.118 |    40.674 |    -0.101 |   0.919 |
+| boroughBronx                          |   -5.627 |    77.808 |    -0.072 |   0.942 |
+| room_typePrivate room                 | -124.188 |     2.996 |   -41.457 |   0.000 |
+| room_typeShared room                  | -153.635 |     8.692 |   -17.676 |   0.000 |
+| stars:boroughBrooklyn                 |   -6.139 |     5.237 |    -1.172 |   0.241 |
+| stars:boroughQueens                   |  -17.455 |     8.539 |    -2.044 |   0.041 |
+| stars:boroughBronx                    |  -22.664 |    17.099 |    -1.325 |   0.185 |
+| boroughBrooklyn:room_typePrivate room |   31.965 |     4.328 |     7.386 |   0.000 |
+| boroughQueens:room_typePrivate room   |   54.933 |     7.459 |     7.365 |   0.000 |
+| boroughBronx:room_typePrivate room    |   71.273 |    18.002 |     3.959 |   0.000 |
+| boroughBrooklyn:room_typeShared room  |   47.797 |    13.895 |     3.440 |   0.001 |
+| boroughQueens:room_typeShared room    |   58.662 |    17.897 |     3.278 |   0.001 |
+| boroughBronx:room_typeShared room     |   83.089 |    42.451 |     1.957 |   0.050 |
+
+- This is more exploratory but maybe easier to understand
+
+- write a function first
+
+``` r
+lm_airbnb=function(df){
+  lm(price~stars+room_type, data=df)
+}
+```
+
+- create a list of dataframe and iterate to fit a model
+
+``` r
+nest_lm_res =
+  nyc_airbnb |> 
+  nest(data = -borough) |> 
+  mutate(
+    fits=map(data,lm_airbnb),
+    results = map(fits, broom::tidy)
+  ) |> 
+   select(borough, results) |> 
+  unnest(results)
+```
+
+- do some untidy
+
+``` r
+nest_lm_res |> 
+  select(borough, term, estimate) |> 
+  mutate(term = fct_inorder(term)) |> 
+  pivot_wider(
+    names_from = term, values_from = estimate) |> 
+  knitr::kable(digits = 3)
+```
+
+| borough   | (Intercept) |  stars | room_typePrivate room | room_typeShared room |
+|:----------|------------:|-------:|----------------------:|---------------------:|
+| Bronx     |      90.067 |  4.446 |               -52.915 |              -70.547 |
+| Queens    |      91.575 |  9.654 |               -69.255 |              -94.973 |
+| Brooklyn  |      69.627 | 20.971 |               -92.223 |             -105.839 |
+| Manhattan |      95.694 | 27.110 |              -124.188 |             -153.635 |
+
+- use anonymous method instead of making a function
+
+``` r
+nest_lm_res =
+  nyc_airbnb |> 
+  nest(data = -borough) |> 
+  mutate(
+    fits=map(data,\(df) lm(price ~ stars + room_type, data = df)),
+    results = map(fits, broom::tidy)
+  ) |> 
+   select(borough, results) |> 
+  unnest(results)
+```
+
+# let’s do an extreme examples
+
+``` r
+manhattan_airbnb =
+  nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  nest(data = -neighborhood) |> 
+  mutate(
+    models = map(data, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(neighborhood, results) |> 
+  unnest(results)
+```
+
+- Make a plot
+
+``` r
+manhattan_airbnb |> 
+  filter(str_detect(term, "room_type")) |> 
+  mutate(
+    neighborhood=fct_reorder(neighborhood, estimate)
+  ) |> 
+  ggplot(aes(x = neighborhood, y = estimate)) + 
+  geom_point() + 
+  facet_wrap(~term) + 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1))
+```
+
+![](data_s10_example_files/figure-gfm/unnamed-chunk-18-1.png)<!-- -->

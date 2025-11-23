@@ -101,3 +101,85 @@ anova(fit_null, fit_alt) |>
   broom::tidy()
 ```
 
+# Nest data, fit model
+
+* This is formal but too complex
+```{r}
+nyc_airbnb |> 
+  lm(price ~ stars * borough + room_type * borough, data = _) |> 
+  broom::tidy() |> 
+  knitr::kable(digits = 3)
+```
+
+* This is more exploratory but maybe easier to understand
+
+* write a function first
+```{r}
+lm_airbnb=function(df){
+  lm(price~stars+room_type, data=df)
+}
+```
+
+* create a list of dataframe and iterate to fit a model
+```{r}
+nest_lm_res =
+  nyc_airbnb |> 
+  nest(data = -borough) |> 
+  mutate(
+    fits=map(data,lm_airbnb),
+    results = map(fits, broom::tidy)
+  ) |> 
+   select(borough, results) |> 
+  unnest(results)
+
+```
+
+* do some untidy
+```{r}
+nest_lm_res |> 
+  select(borough, term, estimate) |> 
+  mutate(term = fct_inorder(term)) |> 
+  pivot_wider(
+    names_from = term, values_from = estimate) |> 
+  knitr::kable(digits = 3)
+```
+
+* use anonymous method instead of making a function
+```{r}
+nest_lm_res =
+  nyc_airbnb |> 
+  nest(data = -borough) |> 
+  mutate(
+    fits=map(data,\(df) lm(price ~ stars + room_type, data = df)),
+    results = map(fits, broom::tidy)
+  ) |> 
+   select(borough, results) |> 
+  unnest(results)
+```
+
+# let's do an extreme examples
+```{r}
+manhattan_airbnb =
+  nyc_airbnb |> 
+  filter(borough == "Manhattan") |> 
+  nest(data = -neighborhood) |> 
+  mutate(
+    models = map(data, \(df) lm(price ~ stars + room_type, data = df)),
+    results = map(models, broom::tidy)) |> 
+  select(neighborhood, results) |> 
+  unnest(results)
+```
+
+* Make a plot
+```{r}
+manhattan_airbnb |> 
+  filter(str_detect(term, "room_type")) |> 
+  mutate(
+    neighborhood=fct_reorder(neighborhood, estimate)
+  ) |> 
+  ggplot(aes(x = neighborhood, y = estimate)) + 
+  geom_point() + 
+  facet_wrap(~term) + 
+  theme(axis.text.x = element_text(angle = 80, hjust = 1))
+```
+
