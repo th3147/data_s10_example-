@@ -31,7 +31,7 @@ fit = lm(price ~ stars + borough, data = nyc_airbnb)
 ```
 
 # Let's see the result
-```{r}
+```{r, include=FALSE}
 fit 
 summary(fit)
 coef(fit)
@@ -48,5 +48,56 @@ fit |>
   select(term, estimate, p.value) |> 
   mutate(term = str_replace(term, "borough", "Borough: ")) |> 
   knitr::kable(digits = 5)
+```
+
+# Be in control of factor
+```{r}
+nyc_airbnb=
+  nyc_airbnb |> 
+  mutate(
+    borough=fct_infreq(borough),
+    room_type=fct_infreq(room_type)
+  )
+```
+
+* Order based on the frequency
+
+# Diagnostic
+```{r}
+modelr::add_residuals(nyc_airbnb, fit)
+```
+
+# draw a plot for residual
+```{r}
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = borough, y = resid)) + geom_violin()
+```
+
+# Another plot for residual
+```{r}
+nyc_airbnb |> 
+  modelr::add_residuals(fit) |> 
+  ggplot(aes(x = stars, y = resid)) + 
+  geom_point()+
+  facet_wrap(.~borough)
+```
+
+* Manhattan have wider distributions
+
+# Hypothesis test
+
+This do t-test by default, which is test for specific borough
+```{r}
+broom::tidy(fit)
+```
+
+ANOVA; the significance for whole borough
+```{r}
+fit_null = lm(price ~ stars , data = nyc_airbnb)
+fit_alt = lm(price ~ stars + borough, data = nyc_airbnb)
+
+anova(fit_null, fit_alt) |> 
+  broom::tidy()
 ```
 
