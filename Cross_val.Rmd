@@ -74,3 +74,58 @@ rmse(smooth_mod, test_df)
 rmse(wiggly_mod, test_df)
 ```
 * Root Mean Squared Error: It answers the question: "On average, how far are my model's predictions from the actual observed values?"
+
+# Using modelr package
+```{r}
+cv_df = 
+  crossv_mc(lidar_df, 100) 
+```
+
+* See how the data look like
+```{r}
+cv_df |> 
+  pull(train) |> 
+  nth(1) |> 
+  as_tibble()
+
+cv_df |> pull(test) |> nth(1) |> as_tibble()
+```
+
+* Change every dataset as small table
+```{r}
+cv_df =
+  cv_df |> 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble))
+```
+
+* Fit the model
+```{r}
+cv_df = 
+  cv_df |> 
+  mutate(
+    linear_mod  = map(train, \(df) lm(logratio ~ range, data = df)),
+    smooth_mod  = map(train, \(df) gam(logratio ~ s(range), data = df)),
+    wiggly_mod  = map(train, \(df) gam(logratio ~ s(range, k = 30), sp = 10e-6, data = df))) |> 
+  mutate(
+    rmse_linear = map2_dbl(linear_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_smooth = map2_dbl(smooth_mod, test, \(mod, df) rmse(model = mod, data = df)),
+    rmse_wiggly = map2_dbl(wiggly_mod, test, \(mod, df) rmse(model = mod, data = df)))
+```
+
+* map2_dbl: to iterate over two lists simultaneously and apply a function to pairs of elements, returning a numeric vector.
+
+# Make the result easily to see
+```{r}
+cv_df |> 
+  select(starts_with("rmse")) |> 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") |> 
+  mutate(model = fct_inorder(model)) |> 
+  ggplot(aes(x = model, y = rmse)) + geom_violin()
+```
+
